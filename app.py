@@ -12,48 +12,30 @@ st.set_page_config(
 # ---------------- Load Model ----------------
 @st.cache_resource
 def load_model():
-    return joblib.load("data_leak_model.pkl")
+    return joblib.load("model.pkl")  # make sure this matches your trained model name
 
 model = load_model()
 
-# ---------------- UI ----------------
+# ---------------- UI Header ----------------
 st.title("🔐 Shadow Data Leak Detector")
-st.write("This application estimates the **risk of a potential data leak** based on password and login behavior.")
+st.markdown(
+    "Analyze your **password strength & login behavior** to detect potential **data leak risks**."
+)
 
 st.divider()
 
 # ---------------- User Inputs ----------------
-password_length = st.slider(
-    "🔑 Password Length",
-    min_value=4,
-    max_value=30,
-    value=12,
-    help="Longer passwords generally reduce risk"
-)
+st.subheader("🧾 Enter Security Details")
 
-special_chars = st.slider(
-    "✨ Number of Special Characters",
-    min_value=0,
-    max_value=10,
-    value=2,
-    help="Special characters increase password strength"
-)
+col1, col2 = st.columns(2)
 
-reuse_count = st.slider(
-    "🔁 Password Reuse Count",
-    min_value=0,
-    max_value=10,
-    value=0,
-    help="Reusing passwords across platforms increases risk"
-)
+with col1:
+    password_length = st.slider("🔑 Password Length", 4, 30, 12)
+    special_chars = st.slider("✨ Special Characters", 0, 10, 2)
 
-login_attempts = st.slider(
-    "🚨 Failed Login Attempts",
-    min_value=0,
-    max_value=20,
-    value=0,
-    help="Multiple failed attempts may indicate attack activity"
-)
+with col2:
+    reuse_count = st.slider("🔁 Password Reuse Count", 0, 10, 0)
+    login_attempts = st.slider("🚨 Failed Login Attempts", 0, 20, 0)
 
 st.divider()
 
@@ -61,40 +43,82 @@ st.divider()
 if st.button("🔍 Analyze Risk", use_container_width=True):
 
     input_data = np.array([[password_length, special_chars, reuse_count, login_attempts]])
-    probability = model.predict_proba(input_data)[0][1] * 100
+
+    prediction = model.predict(input_data)[0]
+    probabilities = model.predict_proba(input_data)[0]
+
+    risk_prob = probabilities[1] * 100
+    confidence = max(probabilities) * 100
 
     st.subheader("📊 Risk Assessment")
 
+    # ----------- Progress Bar -----------
+    st.progress(int(risk_prob))
+
     st.metric(
         label="Estimated Data Leak Probability",
-        value=f"{probability:.2f} %"
+        value=f"{risk_prob:.2f}%"
     )
 
+    st.caption(f"Model Confidence: {confidence:.2f}%")
+
     # ---------- Risk Classification ----------
-    if probability < 35:
+    if risk_prob < 35:
         st.success("🟢 Low Risk")
-        st.write("Your credentials appear secure with minimal exposure risk.")
-    elif probability < 70:
+        risk_level = "Low"
+    elif risk_prob < 70:
         st.warning("🟠 Medium Risk")
-        st.write("Some security improvements are recommended.")
+        risk_level = "Medium"
     else:
         st.error("🔴 High Risk")
-        st.write("Immediate action is advised to reduce potential data leakage.")
+        risk_level = "High"
 
+    # ---------------- Explainability ----------------
     st.divider()
-
-    # ---------- Explainability ----------
     st.subheader("🧠 Why this result?")
-    st.write(
-        f"""
-        - **Password Length:** {password_length}  
-        - **Special Characters:** {special_chars}  
-        - **Password Reuse Count:** {reuse_count}  
-        - **Failed Login Attempts:** {login_attempts}  
 
-        The machine learning model combines these factors to estimate overall risk.
-        """
+    reasons = []
+    improvements = []
+
+    # Logic explanations
+    if password_length < 10:
+        reasons.append("🔑 Password is shorter than recommended")
+        improvements.append("Use at least 12–16 characters")
+
+    if special_chars < 2:
+        reasons.append("✨ Not enough special characters")
+        improvements.append("Include symbols like @, #, $, %")
+
+    if reuse_count > 2:
+        reasons.append("🔁 Password reused across multiple platforms")
+        improvements.append("Use unique passwords for each account")
+
+    if login_attempts > 5:
+        reasons.append("🚨 High number of failed login attempts detected")
+        improvements.append("Enable account lockout or 2FA")
+
+    # Display reasons
+    if reasons:
+        st.write("⚠️ **Risk Factors Detected:**")
+        for r in reasons:
+            st.write(f"- {r}")
+    else:
+        st.success("✅ No major risk factors detected")
+
+    # Display improvements
+    if improvements:
+        st.write("💡 **Recommended Actions:**")
+        for tip in improvements:
+            st.write(f"- {tip}")
+
+    # ---------------- Summary Box ----------------
+    st.divider()
+    st.subheader("📌 Summary")
+
+    st.info(
+        f"Risk Level: **{risk_level}** | Probability: **{risk_prob:.2f}%** | Confidence: **{confidence:.2f}%**"
     )
 
 # ---------------- Footer ----------------
-st.caption("Built with Python, Streamlit & Machine Learning | Educational Project")
+st.divider()
+st.caption("🚀 Built with Streamlit, Machine Learning & Explainable AI")
